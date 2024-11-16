@@ -3,6 +3,7 @@ package memory
 import (
 	"fmt"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -28,37 +29,54 @@ var globalMemoryStatusEx = kernel32.NewProc("GlobalMemoryStatusEx")
 var KB float64 = 1028
 var MB float64 = KB * 1028
 var GB float64 = MB * 1028
-	
 
-func GetMemoryStats() (*Stats, error) {
-	var memStatus memoryStatusEx
-	memStatus.Length = uint32(unsafe.Sizeof(memStatus))
+func GetMemoryStats(seconds time.Duration, msgChannel chan Stats, errChannel chan error) {
+	for {
+		var memStatus memoryStatusEx
+		memStatus.Length = uint32(unsafe.Sizeof(memStatus))
 
-	ret, _, err := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&memStatus)))
-	if ret == 0 {
-		return nil, fmt.Errorf("failed in globalMemoryStatusEx: %s", err)
+		ret, _, err := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&memStatus)))
+		if ret == 0 {
+			errChannel <- err
+			return
+		}
+
+		var mem Stats
+		mem.Free = float64(memStatus.AvailPhys)
+		mem.Total = float64(memStatus.TotalPhys) 
+		mem.Used = mem.Total - mem.Free
+		mem.PageFileTotal = float64(memStatus.TotalPageFile)
+		mem.PageFileFree = float64(memStatus.AvailPageFile)
+		mem.VirtualTotal = float64(memStatus.TotalVirtual)
+		mem.VirtualFree = float64(memStatus.AvailVirtual)
+
+		msgChannel <- mem
+
+		time.Sleep(seconds * time.Second)
 	}
-
-	var mem Stats
-	mem.Free = float64(memStatus.AvailPhys)
-	mem.Total = float64(memStatus.TotalPhys) 
-	mem.Used = mem.Total - mem.Free
-	mem.PageFileTotal = float64(memStatus.TotalPageFile)
-	mem.PageFileFree = float64(memStatus.AvailPageFile)
-	mem.VirtualTotal = float64(memStatus.TotalVirtual)
-	mem.VirtualFree = float64(memStatus.AvailVirtual)
-
-	return &mem, nil
 }
 
-func PrintMemoryInfo() {
-	memInfo, err := GetMemoryStats()
-	if err != nil {
+func PrintMemoryInfo(memInfo Stats) {
+		fmt.Printf("Total Memory: %f GB\n", memInfo.Total/GB)
+		fmt.Printf("Free Memory: %f GB\n", memInfo.Free/GB)
+		fmt.Printf("Used Memory: %f GB\n", memInfo.Used/GB)	
+}
+
+func Test() {
+		fmt.Println("msg received")
+}
+
+func CheckChannelForMeminfo(channel chan Stats) {
+	for {
+		memInfo := <- channel
+		PrintMemoryInfo(memInfo)
+		Test()
+	}
+}
+
+func CheckErrChannel(errChannel chan error) {
+	for {
+		err := <-errChannel
 		panic(err)
 	}
-
-
-	fmt.Printf("Total Memory: %f GB\n", memInfo.Total/GB)
-	fmt.Printf("Free Memory: %f GB\n", memInfo.Free/GB)
-	fmt.Printf("Used Memory: %f GB\n", memInfo.Used/GB)
 }

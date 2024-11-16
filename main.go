@@ -7,5 +7,5 @@ import (
 
 func main() {
 	fmt.Println("Hello GO")
-	monitor.Monitor(1)	
+	monitor.Setup()
 }

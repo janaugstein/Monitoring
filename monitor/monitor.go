@@ -2,12 +2,13 @@ package monitor
 
 import (
 	"Monitoring/memory"
-	"time"
 )
 
-func Monitor(seconds time.Duration) {
-	for {
-		memory.PrintMemoryInfo()
-		time.Sleep(seconds * time.Second)
-	}
+var memoryChannel = make(chan memory.Stats)
+var memErrorChannel = make(chan error)
+
+func Setup() {
+	go memory.CheckChannelForMeminfo(memoryChannel)
+	go memory.CheckErrChannel(memErrorChannel)
+	memory.GetMemoryStats(2, memoryChannel, memErrorChannel)
 }
